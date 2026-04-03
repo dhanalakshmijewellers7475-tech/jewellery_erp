@@ -227,23 +227,17 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
   // --- OLD GOLD STATE ---
   const [isOldGoldOpen, setIsOldGoldOpen] = useState(false);
   const [oldGoldExchange, setOldGoldExchange] = useState({
-    weight: 0,
     weightInput: '',
-    purity: '',
-    rate: 0,
+    purity: 100, 
     rateInput: '',
-    total: 0,
     hsn_code: '7113',
     particulars: '',
   });
 
   // --- VALUE ADDED / MC STATE ---
   const [mcValueAdded, setMcValueAdded] = useState({
-    weight: 0, 
     weightInput: '',
-    rate: 0, 
     rateInput: '',
-    total: 0
   });
 
   // --- PAYMENT STATE ---
@@ -260,7 +254,9 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     itemsSubtotal: 0,
     baseTaxable: 0,
     gstAmount: 0,
-    grandTotal: 0
+    grandTotal: 0,
+    oldGoldTotal: 0,
+    mcTotal: 0
   });
 
   const isReverseCalculating = useRef(false);
@@ -375,55 +371,55 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     return () => clearTimeout(timer);
   }, [newItem.barcode]);
 
-  useEffect(() => {
-    const weight = parseFloat(oldGoldExchange.weightInput) || 0;
-    const rate = parseFloat(oldGoldExchange.rateInput) || (dailyGoldRate || 0);
-    const total = weight * rate;
-    
-    if (weight > 0 && !oldGoldExchange.rateInput && dailyGoldRate > 0) {
-      setOldGoldExchange(prev => ({ ...prev, weight, rate, rateInput: dailyGoldRate.toString(), total }));
-    } else {
-      setOldGoldExchange(prev => ({ ...prev, weight, rate, total }));
-    }
-  }, [oldGoldExchange.weightInput, oldGoldExchange.rateInput, dailyGoldRate]);
-
   // --- CALCULATION ---
-
+  // All totals are calculated in this single source-of-truth effect to prevent loops.
   useEffect(() => {
     if (isReverseCalculating.current) return;
 
+    // 1. Items Subtotal
     const goldItems = items.filter(i => ['gold', 'gold_916', 'gold_750'].includes(i.metal_type || ''));
     const silverItems = items.filter(i => ['silver_92', 'silver_70', 'selam_silver'].includes(i.metal_type || ''));
-
-    const goldSubtotal = goldItems.reduce((sum, item) => sum + item.line_total, 0);
-    const silverSubtotal = silverItems.reduce((sum, item) => sum + item.line_total, 0);
+    const goldSubtotal = goldItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
+    const silverSubtotal = silverItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
     const itemsSubtotal = goldSubtotal + silverSubtotal;
 
-    const oldGoldValue = oldGoldExchange.total || 0;
-    const valueAddedMC = mcValueAdded.total || 0;
+    // 2. Old Gold Calculation
+    const ogWeight = parseFloat(oldGoldExchange.weightInput) || 0;
+    const ogRate = parseFloat(oldGoldExchange.rateInput) || (ogWeight > 0 ? (dailyGoldRate || 0) : 0);
+    const ogTotal = roundToWhole(ogWeight * ogRate * ((oldGoldExchange.purity || 100) / 100));
+
+    // 3. MC / Value Added Calculation
+    const mcWeight = parseFloat(mcValueAdded.weightInput) || 0;
+    const mcRate = parseFloat(mcValueAdded.rateInput) || 0;
+    const mcTotal = roundToWhole(mcWeight * mcRate);
     
-    const baseTaxableWithoutMc = itemsSubtotal - oldGoldValue;
-    const preGstTotal = baseTaxableWithoutMc + valueAddedMC;
+    // 4. Base Taxable & GST
+    const baseTaxableWithoutMc = itemsSubtotal - ogTotal;
+    const preGstTotal = baseTaxableWithoutMc + mcTotal;
 
     const gstRaw = saleType === 'GST' ? preGstTotal * GST_RATE : 0;
     const gstAmount = roundToWhole(gstRaw);
     
     const grandTotal = saleType === 'GST' ? preGstTotal + gstAmount : preGstTotal;
 
+    // 5. Update Calculated Totals State
     setCalculatedTotals({
       goldSubtotal,
       silverSubtotal,
       itemsSubtotal,
       baseTaxable: preGstTotal, 
       gstAmount,
-      grandTotal
+      grandTotal,
+      oldGoldTotal: ogTotal,
+      mcTotal: mcTotal
     });
 
-    if (Math.abs(grandTotal - (parseFloat(amountPayableInput) || 0)) > 1) {
+    // 6. Sync Amount Payable Input (if changed significantly)
+    const currentPayable = parseFloat(amountPayableInput) || 0;
+    if (Math.abs(grandTotal - currentPayable) > 1) {
        setAmountPayableInput(grandTotal > 0 ? grandTotal.toFixed(0) : '');
     }
-
-  }, [items, oldGoldExchange.total, mcValueAdded.total, saleType]);
+  }, [items, oldGoldExchange.weightInput, oldGoldExchange.rateInput, oldGoldExchange.purity, mcValueAdded.weightInput, mcValueAdded.rateInput, saleType, dailyGoldRate]);
 
   const handleAmountPayableChange = (val: string) => {
     setAmountPayableInput(val);
@@ -433,14 +429,14 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     
     isReverseCalculating.current = true;
 
-    const itemsSubtotal = items.reduce((sum, item) => sum + item.line_total, 0);
-    const oldGoldValue = oldGoldExchange.total || 0;
+    const itemsSubtotal = items.reduce((sum, item) => sum + (item.line_total || 0), 0);
+    const oldGoldValue = calculatedTotals.oldGoldTotal || 0;
     const baseTaxableWithoutMc = itemsSubtotal - oldGoldValue;
 
     let targetTaxable = saleType === 'GST' ? targetAmount / (1 + GST_RATE) : targetAmount;
     const requiredMcTotal = targetTaxable - baseTaxableWithoutMc;
 
-    let newMcState = { ...mcValueAdded, total: 0 };
+    let newMcState = { weightInput: mcValueAdded.weightInput, rateInput: mcValueAdded.rateInput, total: 0 };
     
     if (requiredMcTotal > 0) {
       newMcState.total = roundToWhole(requiredMcTotal);
@@ -449,16 +445,18 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
 
       if (currentWeight > 0) {
         const derivedRate = requiredMcTotal / currentWeight;
-        newMcState.rate = derivedRate;
         newMcState.rateInput = derivedRate.toFixed(2);
       } else if (currentRate > 0) {
         const derivedWeight = requiredMcTotal / currentRate;
-        newMcState.weight = derivedWeight;
         newMcState.weightInput = derivedWeight.toFixed(3);
       }
     }
 
-    setMcValueAdded(newMcState);
+    setMcValueAdded(prev => ({
+      ...prev,
+      weightInput: newMcState.weightInput,
+      rateInput: newMcState.rateInput
+    }));
 
     const preGstTotal = baseTaxableWithoutMc + newMcState.total;
     const gstRaw = saleType === 'GST' ? preGstTotal * GST_RATE : 0;
@@ -466,6 +464,7 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     
     setCalculatedTotals(prev => ({
        ...prev,
+       mcTotal: newMcState.total,
        baseTaxable: preGstTotal,
        gstAmount,
        grandTotal: targetAmount 
@@ -688,10 +687,11 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
             customer={customer} items={items} allMetalRates={allMetalRates}
             totals={calculatedTotals} mcValueAdded={mcValueAdded} paymentMethods={paymentMethods}
             oldGold={{
-               weight: parseFloat(oldGoldExchange.weightInput) || 0,
-               rate: parseFloat(oldGoldExchange.rateInput) || 0,
-               total: oldGoldExchange.total, purity: oldGoldExchange.purity,
-               description: oldGoldExchange.particulars
+                weight: parseFloat(oldGoldExchange.weightInput) || 0,
+                rate: parseFloat(oldGoldExchange.rateInput) || 0,
+                total: calculatedTotals.oldGoldTotal, 
+                purity: oldGoldExchange.purity,
+                description: oldGoldExchange.particulars
             }}
           />
         )}
@@ -699,9 +699,12 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
           <ExchangePrint 
             voucherNo={voucherNo} date={billDate} customer={customer}
             exchangeData={{
-               particulars: oldGoldExchange.particulars, weight: parseFloat(oldGoldExchange.weightInput) || 0,
-               rate: parseFloat(oldGoldExchange.rateInput) || 0, purity: oldGoldExchange.purity,
-               hsn_code: oldGoldExchange.hsn_code, total: oldGoldExchange.total
+               particulars: oldGoldExchange.particulars, 
+               weight: parseFloat(oldGoldExchange.weightInput) || 0,
+               rate: parseFloat(oldGoldExchange.rateInput) || 0, 
+               purity: oldGoldExchange.purity,
+               hsn_code: oldGoldExchange.hsn_code, 
+               total: calculatedTotals.oldGoldTotal
             }}
           />
         )}
@@ -745,7 +748,8 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
                       oldGold={{
                         weight: parseFloat(oldGoldExchange.weightInput) || 0,
                         rate: parseFloat(oldGoldExchange.rateInput) || 0,
-                        total: oldGoldExchange.total, purity: oldGoldExchange.purity,
+                        total: calculatedTotals.oldGoldTotal, 
+                        purity: oldGoldExchange.purity,
                         description: oldGoldExchange.particulars
                       }}
                     />
@@ -754,9 +758,12 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
                       isScreenPreview
                       voucherNo={voucherNo} date={billDate} customer={customer}
                       exchangeData={{
-                        particulars: oldGoldExchange.particulars, weight: parseFloat(oldGoldExchange.weightInput) || 0,
-                        rate: parseFloat(oldGoldExchange.rateInput) || 0, purity: oldGoldExchange.purity,
-                        hsn_code: oldGoldExchange.hsn_code, total: oldGoldExchange.total
+                        particulars: oldGoldExchange.particulars, 
+                        weight: parseFloat(oldGoldExchange.weightInput) || 0,
+                        rate: parseFloat(oldGoldExchange.rateInput) || 0, 
+                        purity: oldGoldExchange.purity,
+                        hsn_code: oldGoldExchange.hsn_code, 
+                        total: calculatedTotals.oldGoldTotal
                       }}
                     />
                   )}
@@ -916,7 +923,7 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
            <div onClick={() => setIsOldGoldOpen(!isOldGoldOpen)} className={`flex items-center justify-between p-4 cursor-pointer ${isOldGoldOpen ? 'bg-pink-50' : 'bg-white hover:bg-gray-50'}`}>
              <div className="flex items-center gap-4">
                 <h3 className={`font-bold uppercase tracking-wide text-sm ${isOldGoldOpen ? 'text-pink-700' : 'text-charcoal-700'}`}>Old Gold Exchange (Deduction)</h3>
-                {oldGoldExchange.total > 0 && (
+                {calculatedTotals.oldGoldTotal > 0 && (
                   <button onClick={(e) => { e.stopPropagation(); handleOpenPreview('exchange'); }} className="flex items-center gap-1.5 px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full shadow-sm hover:bg-pink-700 transition-colors">
                       <Eye size={12} /> Preview Exchange
                   </button>
@@ -926,12 +933,12 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
            </div>
            {isOldGoldOpen && (
              <div className="p-5 bg-white border-t border-pink-100 grid grid-cols-12 gap-4">
-                <div className="col-span-4"><Input label="Particulars" value={oldGoldExchange.particulars} onChange={e => setOldGoldExchange({...oldGoldExchange, particulars: e.target.value})} /></div>
-                <div className="col-span-2"><Input label="HSN" value={oldGoldExchange.hsn_code} isMonospaced onChange={e => setOldGoldExchange({...oldGoldExchange, hsn_code: e.target.value})} /></div>
-                <div className="col-span-2"><Input label="Wt (g)" type="number" isMonospaced value={oldGoldExchange.weightInput} onChange={e => setOldGoldExchange({...oldGoldExchange, weightInput: e.target.value})} /></div>
-                <div className="col-span-2"><Input label="Purity %" type="number" isMonospaced value={oldGoldExchange.purity} onChange={e => setOldGoldExchange({...oldGoldExchange, purity: parseFloat(e.target.value)||0})} /></div>
-                <div className="col-span-2"><Input label="Rate" type="number" isMonospaced value={oldGoldExchange.rateInput} onChange={e => setOldGoldExchange({...oldGoldExchange, rateInput: e.target.value})} /></div>
-                <div className="col-span-12 flex justify-end mt-2"><div className="bg-pink-50 px-4 py-2 rounded text-pink-700 font-bold border border-pink-200">Value: - {formatCurrency(oldGoldExchange.total)}</div></div>
+                <div className="col-span-4"><Input label="Particulars" value={oldGoldExchange.particulars} onChange={e => setOldGoldExchange(prev => ({...prev, particulars: e.target.value}))} /></div>
+                <div className="col-span-2"><Input label="HSN" value={oldGoldExchange.hsn_code} isMonospaced onChange={e => setOldGoldExchange(prev => ({...prev, hsn_code: e.target.value}))} /></div>
+                <div className="col-span-2"><Input label="Wt (g)" type="number" isMonospaced value={oldGoldExchange.weightInput} onChange={e => setOldGoldExchange(prev => ({...prev, weightInput: e.target.value}))} /></div>
+                <div className="col-span-2"><Input label="Purity %" type="number" isMonospaced value={oldGoldExchange.purity} onChange={e => setOldGoldExchange(prev => ({...prev, purity: parseFloat(e.target.value)||0}))} /></div>
+                <div className="col-span-2"><Input label="Rate" type="number" isMonospaced value={oldGoldExchange.rateInput} onChange={e => setOldGoldExchange(prev => ({...prev, rateInput: e.target.value}))} /></div>
+                <div className="col-span-12 flex justify-end mt-2"><div className="bg-pink-50 px-4 py-2 rounded text-pink-700 font-bold border border-pink-200">Value: - {formatCurrency(calculatedTotals.oldGoldTotal)}</div></div>
              </div>
            )}
         </div>
@@ -953,13 +960,13 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
           <div className="space-y-3 pb-6 border-b border-gray-200 text-sm">
             <div className="flex justify-between items-center"><span className="text-gray-500 font-medium">Subtotal</span><span className="font-mono font-bold">{formatCurrency(calculatedTotals.itemsSubtotal)}</span></div>
-            {oldGoldExchange.total > 0 && <div className="flex justify-between items-center py-2 bg-pink-50 px-2 rounded -mx-2 font-bold text-pink-700"><span>Less: Old Gold</span><span className="font-mono">- {formatCurrency(oldGoldExchange.total)}</span></div>}
+            {calculatedTotals.oldGoldTotal > 0 && <div className="flex justify-between items-center py-2 bg-pink-50 px-2 rounded -mx-2 font-bold text-pink-700"><span>Less: Old Gold</span><span className="font-mono">- {formatCurrency(calculatedTotals.oldGoldTotal)}</span></div>}
             <div className="bg-gold-50/50 border border-gold-100 rounded p-3 my-2">
                <span className="text-[10px] font-bold text-gold-600 uppercase mb-2 block">Value Added (MC)</span>
                <div className="grid grid-cols-3 gap-2">
-                 <Input placeholder="Wt" isMonospaced className="!py-1 text-xs" value={mcValueAdded.weightInput} onChange={e => setMcValueAdded({...mcValueAdded, weightInput: e.target.value, weight: parseFloat(e.target.value)||0, total: roundToWhole((parseFloat(e.target.value)||0) * (mcValueAdded.rate))})}/>
-                 <Input placeholder="Rate" isMonospaced className="!py-1 text-xs" value={mcValueAdded.rateInput} onChange={e => setMcValueAdded({...mcValueAdded, rateInput: e.target.value, rate: parseFloat(e.target.value)||0, total: roundToWhole((mcValueAdded.weight) * (parseFloat(e.target.value)||0))})}/>
-                 <div className="flex items-center justify-end font-mono font-bold text-sm">{formatCurrency(mcValueAdded.total)}</div>
+                 <Input placeholder="Wt" isMonospaced className="!py-1 text-xs" value={mcValueAdded.weightInput} onChange={e => setMcValueAdded(prev => ({...prev, weightInput: e.target.value}))}/>
+                 <Input placeholder="Rate" isMonospaced className="!py-1 text-xs" value={mcValueAdded.rateInput} onChange={e => setMcValueAdded(prev => ({...prev, rateInput: e.target.value}))}/>
+                 <div className="flex items-center justify-end font-mono font-bold text-sm">{formatCurrency(calculatedTotals.mcTotal)}</div>
                </div>
             </div>
             <div className="border-t border-dashed border-gray-300 pt-2 mt-2">
