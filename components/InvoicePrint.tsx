@@ -98,8 +98,9 @@ export const InvoicePrint: React.FC<InvoicePrintProps> = ({
           .no-print { display: none !important; }
         }
         
-        .luxury-serif { font-family: 'Playfair Display', serif; }
-        .luxury-sans { font-family: 'Montserrat', sans-serif; }
+        body { font-family: 'Calibri', 'Candara', 'Segoe', 'Segoe UI', 'Optima', 'Arial', sans-serif; }
+        .luxury-serif { font-family: 'Calibri', sans-serif; font-weight: bold; }
+        .luxury-sans { font-family: 'Calibri', sans-serif; }
       `}</style>
 
       {/* LUXURY HEADER - CENTERED & COMPACT */}
@@ -114,11 +115,11 @@ export const InvoicePrint: React.FC<InvoicePrintProps> = ({
           
           <div className="luxury-sans text-[8pt] text-[#000000] uppercase tracking-[0.1em] space-y-1 font-bold">
              <p>297, Jain Temple Rd, near Jain Temple, Sulthangunta, Shivaji Nagar, Bengaluru, Karnataka 560001</p>
-             <p className="flex items-center justify-center gap-3">
-                <span>Ph: 099456 32705</span>
-                {saleType === 'GST' && <span className="opacity-30">|</span>}
-                {saleType === 'GST' && <span>GSTIN: 29BBGPM2303C1Z4</span>}
-             </p>
+              <p className="flex items-center justify-center gap-3">
+                <span>Ph: 9980364227 / 9148936147</span>
+                {/* {saleType === 'GST' && <span className="opacity-30">|</span>} */}
+                {/* {saleType === 'GST' && <span>GSTIN: 29BBGPM2303C1Z4</span>} */}
+              </p>
           </div>
         </div>
 
@@ -181,6 +182,7 @@ export const InvoicePrint: React.FC<InvoicePrintProps> = ({
               <th className="py-4 px-2">Description</th>
               <th className="py-4 px-2 text-center">HUID</th>
               <th className="py-4 px-2 text-center">Gross</th>
+              <th className="py-4 px-2 text-center">Wastage</th>
               <th className="py-4 px-2 text-center">Net</th>
               <th className="py-4 px-2 text-right">Rate</th>
               <th className="py-4 px-2 text-right">MC</th>
@@ -194,6 +196,7 @@ export const InvoicePrint: React.FC<InvoicePrintProps> = ({
                 <td className="py-1 px-2 font-black tracking-tight uppercase text-[8.5pt]">{item.item_name}</td>
                 <td className="py-1 px-2 text-center text-[7.5pt] font-bold tracking-widest uppercase">{item.huid || '—'}</td>
                 <td className="py-1 px-2 text-center italic text-[#000000]">{item.gross_weight?.toFixed(3) || item.weight.toFixed(3)}g</td>
+                <td className="py-1 px-2 text-center text-[#000000]">{item.wastage?.toFixed(3) || '—'}g</td>
                 <td className="py-1 px-2 text-center font-black">{item.net_weight?.toFixed(3) || item.weight.toFixed(3)}g</td>
                 <td className="py-1 px-2 text-right font-semibold">{(item.rate).toLocaleString('en-IN')}</td>
                 <td className="py-1 px-2 text-right text-[7.5pt] font-bold">{(item.making_charges).toLocaleString('en-IN')}</td>

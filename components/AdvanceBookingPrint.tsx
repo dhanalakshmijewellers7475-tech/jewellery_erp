@@ -56,12 +56,13 @@ export const AdvanceBookingPrint: React.FC<AdvanceBookingPrintProps> = ({
         
         @media print {
           @page { margin: 0; size: A5 portrait; }
-          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; background-color: #ffffff !important; }
+          body { margin: 0; padding: 0; -webkit-print-color-adjust: exact; background-color: #ffffff !important; font-family: 'Calibri', 'Candara', 'Segoe', 'Segoe UI', 'Optima', 'Arial', sans-serif; }
           .no-print { display: none !important; }
         }
         
-        .luxury-serif { font-family: 'Playfair Display', serif; }
-        .luxury-sans { font-family: 'Montserrat', sans-serif; }
+        body { font-family: 'Calibri', 'Candara', 'Segoe', 'Segoe UI', 'Optima', 'Arial', sans-serif; }
+        .luxury-serif { font-family: 'Calibri', sans-serif; font-weight: bold; }
+        .luxury-sans { font-family: 'Calibri', sans-serif; }
       `}</style>
 
       {/* LUXURY HEADER - CENTERED & COMPACT */}
@@ -76,11 +77,11 @@ export const AdvanceBookingPrint: React.FC<AdvanceBookingPrintProps> = ({
           
           <div className="luxury-sans text-[6.5pt] text-[#000000] uppercase tracking-[0.1em] space-y-1 font-bold">
              <p>297, Jain Temple Rd, Shivajinagar, Bengaluru 560001</p>
-             <p className="flex items-center justify-center gap-2">
-                <span>Ph: 099456 32705</span>
-                <span className="opacity-30">|</span>
-                <span>GSTIN: 29BBGPM2303C1Z4</span>
-             </p>
+              <p className="flex items-center justify-center gap-2">
+                <span>Ph: 9980364227 / 9148936147</span>
+                {/* <span className="opacity-30">|</span> */}
+                {/* <span>GSTIN: 29BBGPM2303C1Z4</span> */}
+              </p>
           </div>
         </div>
 

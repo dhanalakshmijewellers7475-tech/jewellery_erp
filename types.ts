@@ -12,7 +12,6 @@ export type StockStatus = 'in_stock' | 'out_of_stock' | 'sold';
 
 export interface InventoryItem {
   id: string;
-  barcode: string;
   item_name: string;
   category?: string;
   weight?: number;
@@ -30,16 +29,17 @@ export interface InventoryItem {
   metal_type?: string;
   huid?: string;
   gross_weight?: number;
+  wastage?: number;
   net_weight?: number;
   quantity?: number;
 }
 
 export interface BillItem {
   id: string;
-  barcode: string;
   item_name: string;
   gross_weight: number;
   net_weight: number;
+  wastage?: number;
   weight: number; // For backward compatibility or if used as net_weight
   huid?: string;
   rate: number;

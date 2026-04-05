@@ -141,7 +141,7 @@ export const GoldExchange: React.FC = () => {
 
   // --- LOGIC ---
 
-  // Auto-calculate Total Value in Form
+  // Auto-calculate Total Value in Form - Purity is ignored for calculation
   useEffect(() => {
     const w = parseFloat(formData.weight) || 0;
     const r = parseFloat(formData.rate) || 0;
@@ -505,15 +505,9 @@ export const GoldExchange: React.FC = () => {
                               value={formData.weight} 
                               onChange={e => setFormData({...formData, weight: e.target.value})}
                            />
-                           <Select 
-                              label="Purity"
-                              options={[
-                                 {value: '22K', label: '22K (916)'},
-                                 {value: '18K', label: '18K (750)'},
-                                 {value: '14K', label: '14K (585)'},
-                                 {value: '24K', label: '24K (999)'},
-                                 {value: 'Other', label: 'Other'},
-                              ]}
+                           <Input 
+                              label="Purity (Ref)"
+                              placeholder="e.g. 22K"
                               value={formData.purity} 
                               onChange={e => setFormData({...formData, purity: e.target.value})}
                            />

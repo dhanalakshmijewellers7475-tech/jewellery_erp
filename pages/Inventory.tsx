@@ -40,7 +40,6 @@ export const Inventory: React.FC = () => {
   
   // Form State
   const initialFormState: Partial<InventoryItem> = {
-    barcode: '', 
     huid: '', 
     item_name: '', 
     category: 'Ring', 
@@ -63,7 +62,7 @@ export const Inventory: React.FC = () => {
   const [formData, setFormData] = useState(initialFormState);
   
   // Refs for shortcuts
-  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const huidInputRef = useRef<HTMLInputElement>(null);
 
   // --- FETCH DATA ---
   const fetchData = async () => {
@@ -94,10 +93,10 @@ export const Inventory: React.FC = () => {
       
       // Shortcuts active only when modal is open
       if (isModalOpen) {
-        // Alt + B to focus Barcode
-        if (e.altKey && e.key.toLowerCase() === 'b') {
+        // Alt + H to focus HUID
+        if (e.altKey && e.key.toLowerCase() === 'h') {
           e.preventDefault();
-          barcodeInputRef.current?.focus();
+          huidInputRef.current?.focus();
         }
         // Ctrl + S to Save
         if (e.ctrlKey && e.key.toLowerCase() === 's') {
@@ -118,7 +117,7 @@ export const Inventory: React.FC = () => {
   useEffect(() => {
     if (isModalOpen) {
       setTimeout(() => {
-        barcodeInputRef.current?.focus();
+        huidInputRef.current?.focus();
       }, 100);
     }
   }, [isModalOpen]);
@@ -145,8 +144,8 @@ export const Inventory: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!formData.barcode || !formData.item_name || !formData.net_weight) {
-      toast({ title: 'Validation Error', description: 'Please fill required fields (Barcode, Name, Net Weight)', variant: 'destructive' });
+    if (!formData.item_name || !formData.net_weight) {
+      toast({ title: 'Validation Error', description: 'Please fill required fields (Name, Net Weight)', variant: 'destructive' });
       return;
     }
 
@@ -179,7 +178,7 @@ export const Inventory: React.FC = () => {
     const printContent = `
       <html>
         <head>
-          <title>Item Detail - ${item.barcode}</title>
+          <title>Item Detail - ${item.huid || item.item_name}</title>
           <style>
             @media print {
               @page { size: A5 portrait; margin: 0; }
@@ -201,9 +200,8 @@ export const Inventory: React.FC = () => {
           <div class="header">
             <img src="/logo.png" class="logo" />
             <h1 class="shop-name">DHANALAKSHMI JEWELLERS</h1>
-            <p class="sub-header">Inventory Record - ${item.barcode}</p>
+            <p class="sub-header">Inventory Record - ${item.huid || item.item_name}</p>
           </div>
-          <div class="row"><span class="label">Barcode:</span> <span class="value">${item.barcode}</span></div>
           <div class="row"><span class="label">Item Name:</span> <span class="value">${item.item_name}</span></div>
           <div class="row"><span class="label">HUID:</span> <span class="value">${item.huid || '-'}</span></div>
           <div class="row"><span class="label">Category:</span> <span class="value">${item.category}</span></div>
@@ -258,7 +256,7 @@ export const Inventory: React.FC = () => {
     const lowerTerm = searchTerm.toLowerCase();
     return items.filter(item => 
       item.item_name.toLowerCase().includes(lowerTerm) || 
-      item.barcode.toLowerCase().includes(lowerTerm) ||
+      (item.huid && item.huid.toLowerCase().includes(lowerTerm)) ||
       (item.category && item.category.toLowerCase().includes(lowerTerm))
     );
   }, [items, searchTerm]);
@@ -307,7 +305,6 @@ export const Inventory: React.FC = () => {
                <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200 text-charcoal-700 font-bold uppercase text-[11px] tracking-wider sticky top-0 z-10">
                      <tr>
-                        <th className="py-4 px-6">Barcode</th>
                         <th className="py-4 px-6">HUID</th>
                         <th className="py-4 px-6">Item Name</th>
                         <th className="py-4 px-6">Category</th>
@@ -329,7 +326,6 @@ export const Inventory: React.FC = () => {
                         </tr>
                      ) : filteredItems.map(item => (
                         <tr key={item.id} className="hover:bg-gold-50/10 transition-colors group">
-                           <td className="py-3 px-6 font-mono font-medium text-charcoal-800">{item.barcode}</td>
                            <td className="py-3 px-6 font-mono text-xs text-gold-600 font-bold">{item.huid || '-'}</td>
                            <td className="py-3 px-6">
                               <span className="font-bold text-charcoal-900">{item.item_name}</span>
@@ -406,7 +402,7 @@ export const Inventory: React.FC = () => {
                  </div>
                  <div className="flex items-center gap-4">
                     <div className="flex gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                        <span className="bg-charcoal-800 px-2 py-1 rounded border border-charcoal-700">Alt + B : Scan</span>
+                        <span className="bg-charcoal-800 px-2 py-1 rounded border border-charcoal-700">Alt + H : HUID</span>
                         <span className="bg-charcoal-800 px-2 py-1 rounded border border-charcoal-700">Ctrl + S : Save</span>
                     </div>
                     <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">
@@ -425,24 +421,15 @@ export const Inventory: React.FC = () => {
                         <ScanLine size={14}/> Identity
                         </h3>
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
                                 <Input 
-                                    ref={barcodeInputRef}
-                                    label="Barcode / SKU" 
-                                    placeholder="Scan..." 
-                                    isMonospaced 
-                                    value={formData.barcode}
-                                    onChange={e => handleInputChange('barcode', e.target.value)}
-                                    icon={<ScanLine size={14}/>}
-                                />
-                                <Input 
+                                    ref={huidInputRef}
                                     label="HUID Number" 
                                     placeholder="e.g. H123456" 
                                     isMonospaced 
                                     value={formData.huid}
                                     onChange={e => handleInputChange('huid', e.target.value)}
+                                    icon={<ScanLine size={14}/>}
                                 />
-                            </div>
                             <Input 
                                 label="Item Name" 
                                 placeholder="e.g. Diamond Necklace" 

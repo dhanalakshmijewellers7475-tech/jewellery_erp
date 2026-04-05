@@ -196,11 +196,12 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
   // --- BILL ITEM STATE ---
   const [items, setItems] = useState<BillItem[]>([]);
   const [newItem, setNewItem] = useState({
-    barcode: '',
     item_name: '',
     huid: '',
     gross_weight: 0,
     grossWeightInput: '',
+    wastage: 0,
+    wastageInput: '',
     net_weight: 0,
     netWeightInput: '',
     weight: 0,
@@ -326,9 +327,10 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     return () => clearTimeout(timer);
   }, [customerSearch]);
 
+  // --- FETCH ITEM BY HUID ---
   useEffect(() => {
-    const barcode = newItem.barcode.trim();
-    if (!barcode) return;
+    const huid = newItem.huid.trim();
+    if (!huid) return;
 
     const timer = setTimeout(async () => {
       setIsLoadingItem(true);
@@ -336,7 +338,7 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
         const { data } = await supabase
           .from('items')
           .select('*')
-          .eq('barcode', barcode)
+          .eq('huid', huid)
           .single();
 
         if (data) {
@@ -353,6 +355,8 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
             netWeightInput: (data.net_weight || data.weight)?.toString() || '',
             weight: data.net_weight || data.weight || 0,
             weightInput: (data.net_weight || data.weight)?.toString() || '',
+            wastage: (data.gross_weight || data.weight || 0) - (data.net_weight || data.weight || 0),
+            wastageInput: ((data.gross_weight || data.weight || 0) - (data.net_weight || data.weight || 0)).toString(),
             rate: applicableRate,
             rateInput: applicableRate > 0 ? applicableRate.toString() : '',
             making_charges: data.making_charges || 0,
@@ -369,7 +373,7 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [newItem.barcode]);
+  }, [newItem.huid]);
 
   // --- CALCULATION ---
   // All totals are calculated in this single source-of-truth effect to prevent loops.
@@ -383,10 +387,10 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     const silverSubtotal = silverItems.reduce((sum, item) => sum + (item.line_total || 0), 0);
     const itemsSubtotal = goldSubtotal + silverSubtotal;
 
-    // 2. Old Gold Calculation
+    // 2. Old Gold Calculation - Purity is descriptive only
     const ogWeight = parseFloat(oldGoldExchange.weightInput) || 0;
     const ogRate = parseFloat(oldGoldExchange.rateInput) || (ogWeight > 0 ? (dailyGoldRate || 0) : 0);
-    const ogTotal = roundToWhole(ogWeight * ogRate * ((oldGoldExchange.purity || 100) / 100));
+    const ogTotal = roundToWhole(ogWeight * ogRate);
 
     // 3. MC / Value Added Calculation
     const mcWeight = parseFloat(mcValueAdded.weightInput) || 0;
@@ -555,11 +559,11 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     const lineTotal = (netWeight * finalRate) + making;
     setItems([...items, {
       id: Date.now().toString(),
-      barcode: newItem.barcode,
       item_name: newItem.item_name,
       huid: newItem.huid,
       gross_weight: grossWeight,
       net_weight: netWeight,
+      wastage: parseFloat(newItem.wastageInput) || 0,
       weight: netWeight, // Sync weight with net_weight
       rate: finalRate,
       making_charges: making,
@@ -570,7 +574,8 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
     }]);
     
     setNewItem({
-      barcode: '', item_name: '', huid: '', gross_weight: 0, grossWeightInput: '', 
+      item_name: '', huid: '', gross_weight: 0, grossWeightInput: '', 
+      wastage: 0, wastageInput: '',
       net_weight: 0, netWeightInput: '', weight: 0, weightInput: '', rate: 0, rateInput: '',
       making_charges: 0, makingChargesInput: '', makingChargesAmount: '',
       makingChargesPercentage: '', purity: '', hsn_code: '711319', metal_type: 'gold'
@@ -645,7 +650,6 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
       
       const billItems = items.map((item, idx) => ({
         bill_id: savedBill.id, 
-        barcode: item.barcode || null, 
         item_name: item.item_name,
         huid: item.huid || null,
         gross_weight: item.gross_weight,
@@ -657,7 +661,6 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
       if (mcValueAdded.total > 0) {
          billItems.push({
            bill_id: savedBill.id, 
-           barcode: null, 
            item_name: 'Value Added / MC',
            weight: parseFloat(mcValueAdded.weightInput) || 0, rate: parseFloat(mcValueAdded.rateInput) || 0,
            making_charges: 0, line_total: mcValueAdded.total, sl_no: billItems.length + 1, metal_type: 'service'
@@ -868,12 +871,12 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
         {/* Add Items */}
         <Card title="Add New Item">
           <div className="grid grid-cols-12 gap-3 items-end mb-6">
-            <div className="col-span-2"><Input label="Barcode" icon={isLoadingItem ? <div className="animate-spin w-3 h-3 border border-gray-400 rounded-full"/> : <ScanLine size={16} />} isMonospaced value={newItem.barcode} onChange={(e) => setNewItem({...newItem, barcode: e.target.value})} /></div>
             <div className="col-span-2"><Input label="Item Name" value={newItem.item_name} onChange={(e) => setNewItem({...newItem, item_name: e.target.value})} /></div>
-            <div className="col-span-1"><Input label="HUID" isMonospaced value={newItem.huid} onChange={(e) => setNewItem({...newItem, huid: e.target.value})} /></div>
+            <div className="col-span-1"><Input label="HUID" icon={isLoadingItem ? <div className="animate-spin w-3 h-3 border border-gray-400 rounded-full"/> : <ScanLine size={16} />} isMonospaced value={newItem.huid} onChange={(e) => setNewItem({...newItem, huid: e.target.value})} /></div>
             <div className="col-span-1"><Input label="Gross Wt" type="number" isMonospaced value={newItem.grossWeightInput} onChange={(e) => setNewItem({...newItem, grossWeightInput: e.target.value})} /></div>
+            <div className="col-span-1"><Input label="Wastage" type="number" isMonospaced value={newItem.wastageInput} onChange={(e) => setNewItem({...newItem, wastageInput: e.target.value})} /></div>
             <div className="col-span-1"><Input label="Net Wt" type="number" isMonospaced value={newItem.netWeightInput} onChange={(e) => setNewItem({...newItem, netWeightInput: e.target.value})} /></div>
-            <div className="col-span-1">
+            <div className="col-span-2">
                <Select label="Metal Type" value={newItem.metal_type} options={[{ value: 'gold', label: 'Gold (Std)' }, { value: 'gold_916', label: 'Gold (22k)' }, { value: 'gold_750', label: 'Gold (18k)' }, { value: 'silver_92', label: 'Silver (92.5)' }, { value: 'silver_70', label: 'Silver (70)' }, { value: 'selam_silver', label: 'Selam' }]} onChange={e => setNewItem({...newItem, metal_type: e.target.value, rateInput: (allMetalRates[e.target.value]||0).toString()})}/>
             </div>
             <div className="col-span-2"><Input label="Rate/Gm" type="number" isMonospaced placeholder={dailyGoldRate.toString()} value={newItem.rateInput} onChange={(e) => setNewItem({...newItem, rateInput: e.target.value})} /></div>
@@ -891,8 +894,9 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
               <thead className="bg-charcoal-900 text-white font-bold uppercase text-xs">
                 <tr>
                   <th className="py-3 px-4">Item</th>
-                  <th className="py-3 px-4">HUID</th>
+                  <th className="py-3 px-4 text-center">HUID</th>
                   <th className="py-3 px-4 text-right">Gross Wt</th>
+                  <th className="py-3 px-4 text-right">Wastage</th>
                   <th className="py-3 px-4 text-right">Net Wt</th>
                   <th className="py-3 px-4 text-right">Rate</th>
                   <th className="py-3 px-4 text-right">Making</th>
@@ -904,8 +908,9 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
                 {items.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors text-charcoal-900 font-medium">
                     <td className="py-3 px-4">{item.item_name}</td>
-                    <td className="py-3 px-4 font-mono text-xs">{item.huid || '-'}</td>
+                    <td className="py-3 px-4 text-center font-mono text-xs">{item.huid || '-'}</td>
                     <td className="py-3 px-4 text-right font-mono text-gray-400">{item.gross_weight?.toFixed(3) || '0.000'}</td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-400">{( (item.gross_weight || item.weight) - (item.net_weight || item.weight) ).toFixed(3)}</td>
                     <td className="py-3 px-4 text-right font-mono font-bold">{item.net_weight?.toFixed(3) || '0.000'}</td>
                     <td className="py-3 px-4 text-right font-mono">{item.rate.toLocaleString()}</td>
                     <td className="py-3 px-4 text-right font-mono text-gray-600">{item.making_charges.toLocaleString()}</td>
@@ -936,7 +941,7 @@ export const SalesBill: React.FC<SalesBillProps> = ({ billId, onClearEdit }) => 
                 <div className="col-span-4"><Input label="Particulars" value={oldGoldExchange.particulars} onChange={e => setOldGoldExchange(prev => ({...prev, particulars: e.target.value}))} /></div>
                 <div className="col-span-2"><Input label="HSN" value={oldGoldExchange.hsn_code} isMonospaced onChange={e => setOldGoldExchange(prev => ({...prev, hsn_code: e.target.value}))} /></div>
                 <div className="col-span-2"><Input label="Wt (g)" type="number" isMonospaced value={oldGoldExchange.weightInput} onChange={e => setOldGoldExchange(prev => ({...prev, weightInput: e.target.value}))} /></div>
-                <div className="col-span-2"><Input label="Purity %" type="number" isMonospaced value={oldGoldExchange.purity} onChange={e => setOldGoldExchange(prev => ({...prev, purity: parseFloat(e.target.value)||0}))} /></div>
+                <div className="col-span-2"><Input label="Purity (Ref)" value={oldGoldExchange.purity} onChange={e => setOldGoldExchange(prev => ({...prev, purity: parseFloat(e.target.value)||0}))} /></div>
                 <div className="col-span-2"><Input label="Rate" type="number" isMonospaced value={oldGoldExchange.rateInput} onChange={e => setOldGoldExchange(prev => ({...prev, rateInput: e.target.value}))} /></div>
                 <div className="col-span-12 flex justify-end mt-2"><div className="bg-pink-50 px-4 py-2 rounded text-pink-700 font-bold border border-pink-200">Value: - {formatCurrency(calculatedTotals.oldGoldTotal)}</div></div>
              </div>
